@@ -2,7 +2,7 @@
 //  MapView.swift
 //  iOSM
 //
-//  Created by stef on 8/29/25.
+//  Enhanced for navigation with continuous location tracking
 //
 
 import SwiftUI
@@ -13,27 +13,36 @@ struct MapView: View {
     @State private var userLocation: CLLocation?
     @State private var mapLibreMapView = MapLibreMapView(userLocation: .constant(nil))
     @State private var showDebugInfo = false
+    @State private var isFollowingUser = false
     
     var body: some View {
         VStack(spacing: 0) {
             // MapLibre map takes most of the screen
             MapLibreMapView(userLocation: $userLocation)
                 .onAppear {
-                    print("🚀 MapView appeared - requesting location")
-                    locationService.requestLocation()
+                    print("MapView appeared - starting location tracking")
+                    locationService.startTracking()
                 }
-                .onChange(of: locationService.location) { location in
-                    print("📱 LocationService updated location: \(location?.coordinate ?? CLLocationCoordinate2D())")
-                    userLocation = location
+                .onDisappear {
+                    print("MapView disappeared - stopping location tracking")
+                    locationService.stopTracking()
+                }
+                .onChange(of: locationService.location) { oldValue, newValue in
+                    userLocation = newValue
+                    
+                    // Auto-center map on user if following mode is enabled
+                    if isFollowingUser, let location = newValue {
+                        mapLibreMapView.centerOnLocation(location, zoomLevel: 16)
+                    }
                 }
             
-            // Bottom control panel
+            // Enhanced bottom control panel
             VStack(spacing: 10) {
                 HStack {
-                    // Location info
+                    // Navigation status info
                     VStack(alignment: .leading, spacing: 4) {
                         if let location = userLocation {
-                            Text("📍 Location Found")
+                            Text("📍 Navigation Active")
                                 .font(.headline)
                                 .foregroundColor(.green)
                             Text("Lat: \(location.coordinate.latitude, specifier: "%.4f")")
@@ -42,9 +51,14 @@ struct MapView: View {
                             Text("Lon: \(location.coordinate.longitude, specifier: "%.4f")")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
-                            Text("±\(location.horizontalAccuracy, specifier: "%.0f")m")
+                            Text("Speed: \(locationService.speedString)")
                                 .font(.caption2)
                                 .foregroundColor(.blue)
+                            if let heading = locationService.heading {
+                                Text("Heading: \(locationService.headingString)")
+                                    .font(.caption2)
+                                    .foregroundColor(.purple)
+                            }
                         } else if let error = locationService.locationError {
                             HStack {
                                 Image(systemName: "exclamationmark.triangle")
@@ -62,7 +76,7 @@ struct MapView: View {
                             HStack {
                                 ProgressView()
                                     .scaleEffect(0.7)
-                                Text("Getting location...")
+                                Text("Starting navigation...")
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                             }
@@ -71,23 +85,37 @@ struct MapView: View {
                     
                     Spacer()
                     
-                    // Control buttons
+                    // Navigation control buttons
                     VStack(spacing: 8) {
-                        Button("Center") {
-                            if let location = userLocation {
-                                mapLibreMapView.centerOnLocation(location)
-                            } else {
-                                locationService.requestLocation()
+                        // Follow user toggle
+                        Button(action: {
+                            isFollowingUser.toggle()
+                            if isFollowingUser, let location = userLocation {
+                                mapLibreMapView.centerOnLocation(location, zoomLevel: 16)
                             }
+                        }) {
+                            Image(systemName: isFollowingUser ? "location.fill" : "location")
+                                .foregroundColor(isFollowingUser ? .blue : .gray)
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
                         
+                        // Manual center button
+                        Button("Center") {
+                            if let location = userLocation {
+                                mapLibreMapView.centerOnLocation(location, zoomLevel: 16)
+                            }
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .disabled(userLocation == nil)
+                        
+                        // Add waypoint pin
                         Button("Add Pin") {
                             if let location = userLocation {
                                 mapLibreMapView.addMarker(
                                     at: location.coordinate,
-                                    title: "My Location"
+                                    title: "Waypoint"
                                 )
                             }
                         }
@@ -95,6 +123,7 @@ struct MapView: View {
                         .controlSize(.small)
                         .disabled(userLocation == nil)
                         
+                        // Clear all markers
                         Button("Clear") {
                             mapLibreMapView.clearMarkers()
                         }
@@ -103,7 +132,7 @@ struct MapView: View {
                     }
                 }
                 
-                // Debug toggle and map info
+                // Status bar with tracking info
                 HStack {
                     Button("Debug") {
                         showDebugInfo.toggle()
@@ -113,53 +142,59 @@ struct MapView: View {
                     
                     Spacer()
                     
-                    Text("🗺️ MapLibre GL")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                    // Tracking status indicator
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(locationService.isTracking && userLocation != nil ? Color.green : Color.gray)
+                            .frame(width: 8, height: 8)
+                        Text(trackingStatusText)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
                     
                     Spacer()
                     
-                    Text(mapStatusText)
+                    Text("🗺️ OSM Tiles")
                         .font(.caption)
-                        .foregroundColor(mapStatusColor)
+                        .foregroundColor(.secondary)
                 }
                 
-                // Debug information (collapsible)
+                // Expandable debug information
                 if showDebugInfo {
                     VStack(alignment: .leading, spacing: 4) {
                         Divider()
                         
-                        Text("Debug Information")
+                        Text("Navigation Debug Info")
                             .font(.caption)
                             .fontWeight(.semibold)
                         
                         Group {
                             Text("Location Authorization: \(authorizationStatusText)")
-                            Text("Location Service: \(locationService.location != nil ? "Active" : "Inactive")")
+                            Text("Tracking Status: \(locationService.isTracking ? "Active" : "Stopped")")
+                            Text("Follow Mode: \(isFollowingUser ? "ON" : "OFF")")
                             
                             if let location = userLocation {
-                                Text("Speed: \(location.speed >= 0 ? "\(location.speed, specifier: "%.1f") m/s" : "Unknown")")
+                                Text("Accuracy: ±\(location.horizontalAccuracy, specifier: "%.1f")m")
                                 Text("Altitude: \(location.altitude, specifier: "%.1f")m")
-                                Text("Updated: \(location.timestamp, formatter: timeFormatter)")
+                                Text("Course: \(location.course >= 0 ? "\(location.course, specifier: "%.1f")°" : "Unknown")")
+                                Text("Last Update: \(locationService.isLocationRecent ? "Recent" : "Stale")")
                             }
                         }
                         .font(.caption2)
                         .foregroundColor(.secondary)
                         
-                        // Style test buttons
+                        // Manual control buttons
                         HStack {
-                            Button("Style 1") {
-                                mapLibreMapView.changeStyle(to: "https://demotiles.maplibre.org/style.json")
+                            Button(locationService.isTracking ? "Stop Tracking" : "Start Tracking") {
+                                if locationService.isTracking {
+                                    locationService.stopTracking()
+                                } else {
+                                    locationService.startTracking()
+                                }
                             }
                             
-                            Button("Style 2") {
-                                mapLibreMapView.changeStyle(to: "https://raw.githubusercontent.com/maplibre/demotiles/gh-pages/style.json")
-                            }
-                            
-                            Button("Test Pin") {
-                                // Add a test pin at Barnard Castle
-                                let testCoordinate = CLLocationCoordinate2D(latitude: 54.6454, longitude: -1.8463)
-                                mapLibreMapView.addMarker(at: testCoordinate, title: "Test Pin - Barnard Castle")
+                            Button("One-time Location") {
+                                locationService.requestLocation()
                             }
                         }
                         .font(.caption2)
@@ -179,16 +214,14 @@ struct MapView: View {
     
     // MARK: - Helper Properties
     
-    private var mapStatusText: String {
-        if userLocation != nil {
-            return "Online • Location Active"
+    private var trackingStatusText: String {
+        if locationService.isTracking && userLocation != nil {
+            return "Navigating"
+        } else if locationService.isTracking {
+            return "Searching..."
         } else {
-            return "Online • Waiting for Location"
+            return "Stopped"
         }
-    }
-    
-    private var mapStatusColor: Color {
-        userLocation != nil ? .green : .orange
     }
     
     private var authorizationStatusText: String {
@@ -207,12 +240,6 @@ struct MapView: View {
             return "Unknown"
         }
     }
-    
-    private let timeFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.timeStyle = .medium
-        return formatter
-    }()
 }
 
 // MARK: - Preview
