@@ -8,24 +8,28 @@
 import SwiftUI
 import CoreData
 
-// MARK: - Main Content View
-// This is the root view of the app. It uses a TabView to switch between different sections.
 struct ContentView: View {
     var body: some View {
         TabView {
-            // First Tab: Map View
+            // Map (SwiftUI MapKit version – see MapScreen.swift)
             MapView()
                 .tabItem {
                     Label("Map", systemImage: "map")
                 }
-            
-            // Second Tab: Location Info View
-            LocationInfoView()
+
+            // Search (offline geocoding UI)
+            SearchView()
                 .tabItem {
-                    Label("Location", systemImage: "location")
+                    Label("Search", systemImage: "magnifyingglass")
                 }
-            
-            // Third Tab: Settings View
+
+            // Offline Regions manager
+            RegionsView()
+                .tabItem {
+                    Label("Offline", systemImage: "tray.and.arrow.down")
+                }
+
+            // Settings / About
             SettingsView()
                 .tabItem {
                     Label("Settings", systemImage: "gear")

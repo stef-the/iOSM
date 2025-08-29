@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		104004362E621A6E00FE9243 /* MapLibreSwiftMacros in Frameworks */ = {isa = PBXBuildFile; productRef = 104004352E621A6E00FE9243 /* MapLibreSwiftMacros */; };
+		104004382E621A7100FE9243 /* MapLibreSwiftDSL in Frameworks */ = {isa = PBXBuildFile; productRef = 104004372E621A7100FE9243 /* MapLibreSwiftDSL */; };
 		10613F402E62053D00BDBF03 /* MapLibre in Frameworks */ = {isa = PBXBuildFile; productRef = 10613F3F2E62053D00BDBF03 /* MapLibre */; };
 		10613F432E6205BD00BDBF03 /* MapLibreSwiftUI in Frameworks */ = {isa = PBXBuildFile; productRef = 10613F422E6205BD00BDBF03 /* MapLibreSwiftUI */; };
 /* End PBXBuildFile section */
@@ -70,6 +72,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				104004382E621A7100FE9243 /* MapLibreSwiftDSL in Frameworks */,
+				104004362E621A6E00FE9243 /* MapLibreSwiftMacros in Frameworks */,
 				10613F432E6205BD00BDBF03 /* MapLibreSwiftUI in Frameworks */,
 				10613F402E62053D00BDBF03 /* MapLibre in Frameworks */,
 			);
@@ -142,6 +146,8 @@
 			packageProductDependencies = (
 				10613F3F2E62053D00BDBF03 /* MapLibre */,
 				10613F422E6205BD00BDBF03 /* MapLibreSwiftUI */,
+				104004352E621A6E00FE9243 /* MapLibreSwiftMacros */,
+				104004372E621A7100FE9243 /* MapLibreSwiftDSL */,
 			);
 			productName = iOSM;
 			productReference = 105B975B2E61FA44008F6B60 /* iOSM.app */;
@@ -611,6 +617,16 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		104004352E621A6E00FE9243 /* MapLibreSwiftMacros */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 10613F412E6205BD00BDBF03 /* XCRemoteSwiftPackageReference "swiftui-dsl" */;
+			productName = MapLibreSwiftMacros;
+		};
+		104004372E621A7100FE9243 /* MapLibreSwiftDSL */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 10613F412E6205BD00BDBF03 /* XCRemoteSwiftPackageReference "swiftui-dsl" */;
+			productName = MapLibreSwiftDSL;
+		};
 		10613F3F2E62053D00BDBF03 /* MapLibre */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 10613F3B2E62044A00BDBF03 /* XCRemoteSwiftPackageReference "maplibre-gl-native-distribution" */;

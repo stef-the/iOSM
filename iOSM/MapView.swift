@@ -2,27 +2,49 @@
 //  MapView.swift
 //  iOSM
 //
-//  Working version with proper MapLibre integration
+//  Fixed version using MapLibre SwiftUI
 //
 
 import SwiftUI
 import CoreLocation
+import MapLibreSwiftUI
 
 struct MapView: View {
     @StateObject private var locationService = LocationService()
     @State private var userLocation: CLLocation?
     @State private var showDebugInfo = false
     @State private var isFollowingUser = false
-    @State private var mapController = MapController()
+    @State private var camera = MapViewCamera.center(
+        CLLocationCoordinate2D(latitude: 54.6454, longitude: -1.8463),
+        zoom: 12
+    )
+    @State private var annotations: [MapAnnotation] = []
     
     var body: some View {
         VStack(spacing: 0) {
-            // MapLibre map takes most of the screen
-            MapLibreMapViewWithController(
-                userLocation: $userLocation,
-                controller: mapController,
-                isFollowingUser: $isFollowingUser
-            )
+            // MapLibre SwiftUI map
+            MapView(
+                styleURL: URL(string: "https://demotiles.maplibre.org/style.json")!
+            ) {
+                // Add user location if available
+                if let location = userLocation {
+                    CircleAnnotation(centerCoordinate: location.coordinate)
+                        .circleColor(.blue)
+                        .circleRadius(10)
+                        .circleStrokeColor(.white)
+                        .circleStrokeWidth(2)
+                }
+                
+                // Add custom annotations
+                ForEach(annotations, id: \.id) { annotation in
+                    SymbolAnnotation(coordinate: annotation.coordinate)
+                        .iconImage("marker")
+                        .textField(annotation.title)
+                        .textColor(.black)
+                        .textSize(12)
+                }
+            }
+            .mapViewCamera($camera)
             .onAppear {
                 print("MapView appeared - starting location tracking")
                 locationService.startTracking()
@@ -33,6 +55,9 @@ struct MapView: View {
             }
             .onChange(of: locationService.location) { oldValue, newValue in
                 userLocation = newValue
+                if isFollowingUser, let location = newValue {
+                    camera = MapViewCamera.center(location.coordinate, zoom: camera.zoom ?? 15)
+                }
             }
             
             // Enhanced bottom control panel
@@ -90,7 +115,7 @@ struct MapView: View {
                         Button(action: {
                             isFollowingUser.toggle()
                             if isFollowingUser, let location = userLocation {
-                                mapController.centerOnLocation(location, zoomLevel: 16)
+                                camera = MapViewCamera.center(location.coordinate, zoom: 16)
                             }
                         }) {
                             Image(systemName: isFollowingUser ? "location.fill" : "location")
@@ -102,9 +127,8 @@ struct MapView: View {
                         // Manual center button
                         Button("Center") {
                             if let location = userLocation {
-                                mapController.centerOnLocation(location, zoomLevel: 16)
+                                camera = MapViewCamera.center(location.coordinate, zoom: 16)
                             } else {
-                                // Try to get location if we don't have one
                                 locationService.startTracking()
                             }
                         }
@@ -114,10 +138,7 @@ struct MapView: View {
                         // Add waypoint pin
                         Button("Add Pin") {
                             if let location = userLocation {
-                                mapController.addMarker(
-                                    at: location.coordinate,
-                                    title: "Waypoint"
-                                )
+                                addMarker(at: location.coordinate, title: "Waypoint")
                             }
                         }
                         .buttonStyle(.bordered)
@@ -126,7 +147,7 @@ struct MapView: View {
                         
                         // Clear all markers
                         Button("Clear") {
-                            mapController.clearMarkers()
+                            annotations.removeAll()
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
@@ -155,7 +176,7 @@ struct MapView: View {
                     
                     Spacer()
                     
-                    Text("OSM Tiles")
+                    Text("MapLibre GL")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
@@ -173,12 +194,17 @@ struct MapView: View {
                             Text("Location Authorization: \(authorizationStatusText)")
                             Text("Tracking Status: \(locationService.isTracking ? "Active" : "Stopped")")
                             Text("Follow Mode: \(isFollowingUser ? "ON" : "OFF")")
+                            Text("Annotations: \(annotations.count)")
                             
                             if let location = userLocation {
                                 Text("Accuracy: ±\(location.horizontalAccuracy, specifier: "%.1f")m")
                                 Text("Altitude: \(location.altitude, specifier: "%.1f")m")
                                 Text("Course: \(location.course >= 0 ? "\(location.course, specifier: "%.1f")°" : "Unknown")")
                                 Text("Last Update: \(locationService.isLocationRecent ? "Recent" : "Stale")")
+                            }
+                            
+                            if let zoom = camera.zoom {
+                                Text("Zoom Level: \(zoom, specifier: "%.1f")")
                             }
                         }
                         .font(.caption2)
@@ -197,6 +223,10 @@ struct MapView: View {
                             Button("One-time Location") {
                                 locationService.requestLocation()
                             }
+                            
+                            Button("Test Marker") {
+                                addMarker(at: CLLocationCoordinate2D(latitude: 54.6454, longitude: -1.8463), title: "Test")
+                            }
                         }
                         .font(.caption2)
                     }
@@ -207,6 +237,18 @@ struct MapView: View {
             .background(Color(UIColor.systemBackground))
             .shadow(radius: 2)
         }
+    }
+    
+    // MARK: - Helper Methods
+    
+    private func addMarker(at coordinate: CLLocationCoordinate2D, title: String) {
+        let newAnnotation = MapAnnotation(
+            id: UUID(),
+            coordinate: coordinate,
+            title: title
+        )
+        annotations.append(newAnnotation)
+        print("Added marker at: \(coordinate) - \(title)")
     }
     
     // MARK: - Helper Properties
@@ -239,151 +281,11 @@ struct MapView: View {
     }
 }
 
-// MARK: - Map Controller Class
-class MapController: ObservableObject {
-    private weak var mapView: MLNMapView?
-    
-    func setMapView(_ mapView: MLNMapView) {
-        self.mapView = mapView
-    }
-    
-    func centerOnLocation(_ location: CLLocation, zoomLevel: Double = 15) {
-        print("Centering map on: \(location.coordinate)")
-        mapView?.setCenter(location.coordinate, zoomLevel: zoomLevel, animated: true)
-    }
-    
-    func addMarker(at coordinate: CLLocationCoordinate2D, title: String) {
-        print("Adding marker at: \(coordinate) - \(title)")
-        let annotation = MLNPointAnnotation()
-        annotation.coordinate = coordinate
-        annotation.title = title
-        mapView?.addAnnotation(annotation)
-    }
-    
-    func clearMarkers() {
-        print("Clearing all markers")
-        guard let annotations = mapView?.annotations else { return }
-        mapView?.removeAnnotations(annotations)
-    }
-}
-
-// MARK: - Enhanced MapLibre View
-struct MapLibreMapViewWithController: UIViewRepresentable {
-    @Binding var userLocation: CLLocation?
-    let controller: MapController
-    @Binding var isFollowingUser: Bool
-    
-    func makeUIView(context: Context) -> MLNMapView {
-        // Create the map view
-        let mapView = MLNMapView(frame: .zero)
-        
-        // Set initial position (Barnard Castle, England)
-        let initialCoordinate = CLLocationCoordinate2D(latitude: 54.6454, longitude: -1.8463)
-        mapView.setCenter(initialCoordinate, zoomLevel: 12, animated: false)
-        
-        // Configure the map
-        mapView.delegate = context.coordinator
-        
-        // Enable user location
-        mapView.showsUserLocation = true
-        mapView.userTrackingMode = .none
-        
-        // Set some additional properties for better performance
-        mapView.minimumZoomLevel = 1
-        mapView.maximumZoomLevel = 20
-        
-        // Connect to controller
-        controller.setMapView(mapView)
-        
-        return mapView
-    }
-    
-    func updateUIView(_ uiView: MLNMapView, context: Context) {
-        // Auto-center if following user and location updates
-        if isFollowingUser, let location = userLocation {
-            let currentCenter = uiView.centerCoordinate
-            let distance = CLLocation(latitude: currentCenter.latitude,
-                                    longitude: currentCenter.longitude)
-                            .distance(from: location)
-            
-            // Only center if map is far from user (avoid constant updates)
-            if distance > 50 {
-                uiView.setCenter(location.coordinate, zoomLevel: uiView.zoomLevel, animated: true)
-            }
-        }
-    }
-    
-    func makeCoordinator() -> Coordinator {
-        Coordinator(self)
-    }
-    
-    class Coordinator: NSObject, MLNMapViewDelegate {
-        var parent: MapLibreMapViewWithController
-        
-        init(_ parent: MapLibreMapViewWithController) {
-            self.parent = parent
-        }
-        
-        // Called when map style starts loading
-        func mapViewWillStartLoadingMap(_ mapView: MLNMapView) {
-            print("MapLibre: Starting to load map...")
-        }
-        
-        // Called when map is ready for style configuration
-        func mapView(_ mapView: MLNMapView, didFinishLoading style: MLNStyle) {
-            print("MapLibre base style loaded, adding tile layer...")
-            
-            // Create a simple raster tile source
-            let tileSource = MLNRasterTileSource(
-                identifier: "osm-tiles",
-                tileURLTemplates: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
-                options: [
-                    .minimumZoomLevel: 0,
-                    .maximumZoomLevel: 18,
-                    .tileSize: 256,
-                    .attributionInfos: [
-                        MLNAttributionInfo(title: NSAttributedString(string: "© OpenStreetMap"), url: URL(string: "https://www.openstreetmap.org/copyright"))
-                    ]
-                ]
-            )
-            
-            // Add the source to the style
-            style.addSource(tileSource)
-            
-            // Create a raster layer
-            let rasterLayer = MLNRasterStyleLayer(identifier: "osm-layer", source: tileSource)
-            style.addLayer(rasterLayer)
-            
-            print("Added OpenStreetMap raster tiles to map")
-            
-            // Add test marker
-            let testAnnotation = MLNPointAnnotation()
-            testAnnotation.coordinate = mapView.centerCoordinate
-            testAnnotation.title = "Barnard Castle"
-            testAnnotation.subtitle = "Map with OSM tiles!"
-            mapView.addAnnotation(testAnnotation)
-        }
-        
-        // Called when user location updates
-        func mapView(_ mapView: MLNMapView, didUpdate userLocation: MLNUserLocation?) {
-            if let location = userLocation?.location {
-                print("User location updated: \(location.coordinate)")
-                DispatchQueue.main.async {
-                    self.parent.userLocation = location
-                }
-            }
-        }
-        
-        // Called when map region changes
-        func mapView(_ mapView: MLNMapView, regionDidChangeAnimated animated: Bool) {
-            // Disable follow mode if user manually moves the map
-            if animated == false { // User gesture, not programmatic
-                DispatchQueue.main.async {
-                    self.parent.isFollowingUser = false
-                }
-            }
-        }
-    }
+// MARK: - Map Annotation Model
+struct MapAnnotation {
+    let id = UUID()
+    let coordinate: CLLocationCoordinate2D
+    let title: String
 }
 
 // MARK: - Preview
